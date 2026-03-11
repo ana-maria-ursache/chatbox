@@ -4,10 +4,11 @@ from db.model import UserRecord
 from db.database import Base, engine
 from sqlalchemy.orm import Session
 from api.routes import core_router, auth_router
+from api.lifespan import lifespan
 
 Base.metadata.create_all(bind=engine)
 
-app = FastAPI()
+app = FastAPI(lifespan = lifespan)
 
 app.include_router(core_router)
 app.include_router(auth_router)
