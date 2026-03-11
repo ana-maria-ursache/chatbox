@@ -23,12 +23,12 @@ def create_sql_light_engine(path: str | None = None):
 Base = declarative_base()
 
 engine = create_sql_light_engine("chatbox.db")
-SessionMaker = sessionmaker(autocommit=False, autoflush=False, bind=engine) # better to have the autocommit=false because u may have multiple operations in a single transaction and you want to commit them together.
+Session = sessionmaker(autocommit=False, autoflush=False, bind=engine) # better to have the autocommit=false because u may have multiple operations in a single transaction and you want to commit them together.
 
 def get_db():
-    if SessionMaker is None:
+    if Session is None:
         raise ValueError("Database not configured.")
-    db = SessionMaker()
+    db = Session()
     try:
         yield db
     finally:
