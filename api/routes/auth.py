@@ -1,98 +1,40 @@
 from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy.orm import Session
+
+from api.models import LoginRequest, SignupRequest, TokenResponse, UserResponse
 from db.database import get_db
-from db.model import UserRecord
-from pydantic import BaseModel, Field, EmailStr
-from datetime import datetime, timedelta, timezone
-from ..Settings import settings
-import bcrypt
-import jwt
+from db.models import UserRecord
+from utils.auth import create_token, hash_password, verify_password
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
-# models
-class UserCreate(BaseModel):
-    email: EmailStr
-    name: str = Field(min_length=5, max_length=20)
-    avatar_url: str = Field(default="") # optional
-    password_hash: str = Field(min_length=8, max_length=20)
+@router.post("/login", response_model=TokenResponse)
+def login(body: LoginRequest, db: Session = Depends(get_db)):
+    user = db.query(UserRecord).filter(UserRecord.email == body.email).first()
 
-class User(BaseModel):
-    id: int
-    email: EmailStr
-    name: str
-    avatar_url: str
-    password_hash: str
-    
-    # When validating a model from a non‑dict 
-    # object, read values from its attributes.
-    model_config = {
-        "from_attributes": True
-    }
+    if not user or not user.password_hash or not verify_password(body.password, user.password_hash):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid email or password")
 
-class TokenResponse(BaseModel):
-    user: User
-    access_token: str
-    token_type: str = "bearer"
-
-# helper functions
-def create_access_token(user_id: int):
-    expire = datetime.now(timezone.utc) + timedelta(minutes=settings.access_token_expire_minutes)
-    
-    to_encode = {
-        "sub": str(user_id),
-        "exp": expire
-    }
-    
-    encoded_jwt = jwt.encode(to_encode, settings.secret_key, algorithm=settings.algorithm)
-    return encoded_jwt
-
-# general user - for testing
-user_create = UserCreate(
-    email="anaa@ana.com", 
-    name="aaana",
-    avatar_url="anaaaaa",
-    password_hash="12345a11"
-)
-
-# routes
-
-@router.post("/login")
-def login():
-    pass
-
-
-@router.post("/signup")
-def signup(user_create: UserCreate, db = Depends(get_db)):
-    # here we already know that the data is valid for the table
-    
-    existing_user = db.query(UserRecord).filter(UserRecord.email == user_create.email).first()
-    
-    if existing_user:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Email already registered"
-        )
-        
-    password_hash = bcrypt.hashpw(user_create.password_hash.encode(), bcrypt.gensalt())
-    
-    new_user = UserRecord( 
-        email=user_create.email,
-        name=user_create.name,
-        avatar_url=user_create.avatar_url,
-        password_hash=password_hash
+    return TokenResponse(
+        access_token=create_token(user.id),
+        user=UserResponse.model_validate(user),
     )
 
-    db.add(new_user)
+@router.post("/signup", response_model=TokenResponse, status_code=status.HTTP_201_CREATED)
+def signup(body: SignupRequest, db: Session = Depends(get_db)):
+    if db.query(UserRecord).filter(UserRecord.email == body.email).first():
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Email already registered")
+
+    user = UserRecord(
+        email=body.email,
+        name=body.name,
+        password_hash=hash_password(body.password),
+    )
+    db.add(user)
     db.commit()
-    db.refresh(new_user)
-    
-    # from UserRecord to User(pydantic):
-    # transform and validate
-    user = User.model_validate(new_user)
-    
-    access_token =  create_access_token(user.id) 
-    
-    # return user # pydantic obj are transformable to json
+    db.refresh(user)
+
     return TokenResponse(
-        user=user,
-        access_token=access_token)
+        access_token=create_token(user.id),
+        user=UserResponse.model_validate(user),
+    )

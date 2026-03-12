@@ -1,6 +1,6 @@
 from fastapi import FastAPI, Depends
 import uvicorn
-from db.model import UserRecord
+from db.models import UserRecord
 from db.database import Base, engine
 from sqlalchemy.orm import Session
 from api.routes import core_router, auth_router
