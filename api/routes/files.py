@@ -91,8 +91,8 @@ async def get_file_metadata(
     return file_record
 
 
-@router.get("/{file_id}/download", response_class=FileResponse)
-async def download_file(
+@router.get("/{file_id}/preview", response_class=FileResponse)
+async def preview_file(
     file_id: int,
     current_user: UserRecord = Depends(get_current_user),
     db: Session = Depends(get_db),
